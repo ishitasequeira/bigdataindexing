@@ -16,9 +16,9 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 public class CustomizedResponseEntityExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(PlanAlreadyPresentException.class)
     @ResponseBody
-    public final ResponseEntity<Object> handleUserAlreadyPresentException(PlanAlreadyPresentException ex, WebRequest request) {
-        Response exceptionResponse = new Response(HttpStatus.BAD_REQUEST.toString(), ex.getMessage());
-        return new ResponseEntity(exceptionResponse.toString(), HttpStatus.BAD_REQUEST);
+    public final ResponseEntity<Object> handlePlanAlreadyPresentException(PlanAlreadyPresentException ex, WebRequest request) {
+        Response exceptionResponse = new Response(HttpStatus.ALREADY_REPORTED.toString(), ex.getMessage());
+        return new ResponseEntity(exceptionResponse.toString(), HttpStatus.ALREADY_REPORTED);
     }
 
     @ExceptionHandler(PlanNotFoundException.class)
@@ -36,6 +36,20 @@ public class CustomizedResponseEntityExceptionHandler extends ResponseEntityExce
         return new ResponseEntity(exceptionResponse.toString(), HttpStatus.BAD_REQUEST);
     }
 
+    @ExceptionHandler(PlanCreated.class)
+    @ResponseBody
+    public final ResponseEntity<Object> PlanCreated(PlanCreated ex, WebRequest request) {
+        Response exceptionResponse = new Response(HttpStatus.CREATED.toString(), ex.getMessage());
+        return new ResponseEntity(exceptionResponse.toString(), HttpStatus.CREATED);
+    }
+
+    @ExceptionHandler(SuccessResponse.class)
+    @ResponseBody
+    public final ResponseEntity<Object> PlanCreated(SuccessResponse ex, WebRequest request) {
+        Response exceptionResponse = new Response(HttpStatus.OK.toString(), ex.getMessage());
+        return new ResponseEntity(exceptionResponse.toString(), HttpStatus.OK);
+    }
+
 
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
@@ -45,11 +59,11 @@ public class CustomizedResponseEntityExceptionHandler extends ResponseEntityExce
         return new ResponseEntity(exceptionResponse, HttpStatus.BAD_REQUEST);
     }
 
-    @Override
-    protected ResponseEntity<Object> handleExceptionInternal(Exception ex, Object body, HttpHeaders headers, HttpStatus status, WebRequest request) {
-        Response exceptionResponse = new Response(HttpStatus.BAD_REQUEST.toString(), "Invalid Request Body");
-        return new ResponseEntity(exceptionResponse.toString(), HttpStatus.BAD_REQUEST);
-    }
+//    @Override
+//    protected ResponseEntity<Object> handleExceptionInternal(Exception ex, Object body, HttpHeaders headers, HttpStatus status, WebRequest request) {
+//        Response exceptionResponse = new Response(HttpStatus.BAD_REQUEST.toString(), "Invalid Request Body");
+//        return new ResponseEntity(exceptionResponse.toString(), HttpStatus.BAD_REQUEST);
+//    }
 
 
 

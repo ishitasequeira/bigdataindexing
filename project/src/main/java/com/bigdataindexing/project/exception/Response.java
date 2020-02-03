@@ -5,19 +5,19 @@ import java.util.Date;
 public class Response {
 
 
-    private String error;
+    private String message;
     private String details;
     private Date timestamp;
 
-    public Response(String error, String details) {
+    public Response(String message, String details) {
         super();
-        this.error = error;
+        this.message = message;
         this.details = details;
         this.timestamp = new Date();
     }
 
-    public String getError() {
-        return error;
+    public String getMessage() {
+        return message;
     }
 
     public String getDetails() {
@@ -31,7 +31,7 @@ public class Response {
     @Override
     public String toString() {
         return "{\n" +
-                "\t\"error\":\"" + error + "\",\n" +
+                "\t\"message\":\"" + message + "\",\n" +
                 "\t\"details\":\"" + details + "\",\n" +
                 "\t\"timestamp\":\"" + timestamp + "\"\n" +
                 '}';

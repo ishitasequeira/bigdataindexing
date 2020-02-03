@@ -3,11 +3,13 @@ package com.bigdataindexing.project;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericToStringSerializer;
+import org.springframework.web.filter.ShallowEtagHeaderFilter;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
@@ -28,6 +30,20 @@ public class BigDataIndexingProjectApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(BigDataIndexingProjectApplication.class, args);
 	}
+
+
+
+	@Bean
+	public FilterRegistrationBean<ShallowEtagHeaderFilter> shallowEtagHeaderFilter() {
+		FilterRegistrationBean<ShallowEtagHeaderFilter> filterRegistrationBean
+				= new FilterRegistrationBean<>( new ShallowEtagHeaderFilter());
+		filterRegistrationBean.addUrlPatterns("/plan/*");
+		filterRegistrationBean.setName("etagFilter");
+		return filterRegistrationBean;
+	}
+
+
+
 
 
 }
