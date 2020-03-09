@@ -31,19 +31,4 @@ public class BigDataIndexingProjectApplication {
 		SpringApplication.run(BigDataIndexingProjectApplication.class, args);
 	}
 
-
-
-	@Bean
-	public FilterRegistrationBean<ShallowEtagHeaderFilter> shallowEtagHeaderFilter() {
-		FilterRegistrationBean<ShallowEtagHeaderFilter> filterRegistrationBean
-				= new FilterRegistrationBean<>( new ShallowEtagHeaderFilter());
-		filterRegistrationBean.addUrlPatterns("/plan/*");
-		filterRegistrationBean.setName("etagFilter");
-		return filterRegistrationBean;
-	}
-
-
-
-
-
 }
