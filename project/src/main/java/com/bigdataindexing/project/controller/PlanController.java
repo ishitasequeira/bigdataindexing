@@ -130,7 +130,7 @@ public class PlanController {
             throw new PlanNotFoundException("Plan is not present");
         } else {
             JSONObject jsonObject = new JSONObject(new JSONTokener(object));
-            Set<String> keys = (Set<String>) jedis.keys(id + "*");
+            Set<String> keys = jedis.keys(id + "*");
             List<String> key_val = new ArrayList<>(jsonObject.keySet());
 
             for (int i = 0; i < key_val.size(); i++) {
@@ -205,6 +205,75 @@ public class PlanController {
         }
     }
 
+    @PutMapping(path = "/plan/{id}")
+    public ResponseEntity putPlan(@PathVariable String id, @RequestHeader(name = "If-Match") String etag, @RequestBody String data) {
+        if (etag == null) {
+
+            throw new MissingEtagException("If-Match header missing");
+        }
+        if (map.get(id) != null && !map.get(id).equals(etag)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .eTag(etag)
+                    .body(new Response(HttpStatus.BAD_REQUEST.toString(), "The object has been modified by other user.Please get the latest version of the object"));
+        }
+        //took the String and converted into json object
+        JSONObject jsonObject = new JSONObject(new JSONTokener(data));
+        JSONObject jsonSchema = new JSONObject(
+                new JSONTokener(PlanController.class.getResourceAsStream("/jsonschema.json")));
+
+        Schema schema = SchemaLoader.load(jsonSchema);
+        try {
+            //validated the schema against object
+
+            schema.validate(jsonObject);
+        } catch (ValidationException e) {
+            e.getCausingExceptions().stream().map(ValidationException::getMessage).forEach(System.out::println);
+
+
+            throw new InvalidInputException("Invalid Input. Error: " + e.getMessage());
+        }
+        Jedis jedis = jedisPool.getResource();
+
+        String object = jedis.get(id);
+        if (object == null) {
+            jedis.close();
+            throw new PlanNotFoundException("Plan is not present");
+        } else {
+            JSONObject jedisObject = getJedisJSONObject(id);
+            if( id != jsonObject.getString("objectId")){
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .eTag(etag)
+                        .body(new Response(HttpStatus.BAD_REQUEST.toString(), "The object id's do not match"));
+            }else{
+
+            }
+        }
+
+        return null;
+    }
+
+    @PatchMapping(path = "/plan/{id}")
+    public ResponseEntity patchPlan(@PathVariable String id, @RequestHeader(name = "If-Match") String etag) {
+        if (etag == null) {
+
+            throw new MissingEtagException("If-Match header missing");
+        }
+
+        if (map.get(id) != null && !map.get(id).equals(etag)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .eTag(etag)
+                    .body(new Response(HttpStatus.BAD_REQUEST.toString(), "The object has been modified by other user.Please get the latest version of the object"));
+        }
+        Jedis jedis = jedisPool.getResource();
+        String object = jedis.get(id);
+        if (object == null) {
+            jedis.close();
+            throw new PlanNotFoundException("Plan is not present");
+        } else {
+
+        }
+        return null;
+    }
 
     // to create a etag
 
@@ -214,5 +283,44 @@ public class PlanController {
         return key;
     }
 
+    public JSONObject getJedisJSONObject(String id) {
+        Jedis jedis = jedisPool.getResource();
 
+        String object = jedis.get(id);
+
+        JSONObject jsonObject = new JSONObject(new JSONTokener(object));
+        Set<String> keys = jedis.keys(id + "*");
+        List<String> key_val = new ArrayList<>(jsonObject.keySet());
+
+        for (int i = 0; i < key_val.size(); i++) {
+
+            String str = key_val.get(i);
+            if (jsonObject.get(str) instanceof JSONArray) {
+                System.out.println(jsonObject.get(str));
+                JSONArray jsonArray = (JSONArray) jsonObject.get(str);
+                JSONArray l = new JSONArray();
+                for (int j = 0; j < jsonArray.length(); j++) {
+                    System.out.println(jsonArray.length());
+                    JSONObject ob = new JSONObject(new JSONTokener(jedis.get(jsonArray.getString(j))));
+                    List<String> k = new ArrayList<>(ob.keySet());
+                    for (int a = 0; a < k.size(); a++) {
+                        if (keys.contains(ob.get(k.get(a)))) {
+                            System.out.println(str + " = " + jedis.get(ob.get(k.get(a)).toString()));
+                            ob.put(
+                                    k.get(a),
+                                    new JSONObject(new JSONTokener(jedis.get(ob.get(k.get(a)).toString()))));
+                        }
+                    }
+                    l.put(ob);
+                }
+                jsonObject.put(str, l);
+            }
+            if (keys.contains(jsonObject.get(str))) {
+                System.out.println(str + " = " + jedis.get(jsonObject.get(str).toString()));
+                jsonObject.put(
+                        str, new JSONObject(new JSONTokener(jedis.get(jsonObject.get(str).toString()))));
+            }
+        }
+        return jsonObject;
+    }
 }
