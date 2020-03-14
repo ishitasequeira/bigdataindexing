@@ -1,7 +1,6 @@
 package com.bigdataindexing.project.controller;
 
 import com.bigdataindexing.project.exception.*;
-import org.apache.tomcat.util.http.parser.Authorization;
 import org.everit.json.schema.Schema;
 import org.everit.json.schema.ValidationException;
 import org.everit.json.schema.loader.SchemaLoader;
@@ -89,7 +88,9 @@ public class PlanController {
     }
 
     @DeleteMapping(path = "/plan/{id}")
-    public ResponseEntity deleteplan(@PathVariable String id, @RequestHeader(name = "If-Match") String etag) {
+    public ResponseEntity deleteplan(@PathVariable String id, @RequestHeader(name = "If-Match") String etag,  @RequestHeader("Authorization") String authorization) {
+        authorize(authorization);
+
 
         if (etag == null) {
 
@@ -113,7 +114,7 @@ public class PlanController {
     @PutMapping(path = "/plan/{id}")
     public ResponseEntity putPlan(@PathVariable String id, @RequestHeader(name = "If-Match") String etag, @RequestHeader("Authorization") String authorization, @RequestBody String data) {
         authorize(authorization);
-        if (etag == null) {
+        if (etag == null ||  etag.isEmpty()) {
 
             throw new MissingEtagException("If-Match header missing");
         }
@@ -152,10 +153,10 @@ public class PlanController {
     }
 
     @PatchMapping(path = "/plan/{id}")
-    public ResponseEntity patchPlan(@PathVariable String id, @RequestHeader(name = "If-Match") String etag,  @RequestHeader("Authorization") String authorization) {
+    public ResponseEntity patchPlan(@PathVariable String id, @RequestHeader(name = "If-Match") String etag, @RequestHeader("Authorization") String authorization, @RequestBody String data) {
         authorize(authorization);
 
-        if (etag == null) {
+        if (etag == null || etag.isEmpty()) {
             throw new MissingEtagException("If-Match header missing");
         }
 
@@ -164,19 +165,104 @@ public class PlanController {
                     .eTag(etag)
                     .body(new Response(HttpStatus.BAD_REQUEST.toString(), "The object has been modified by other user.Please get the latest version of the object"));
         }
+
         Jedis jedis = jedisPool.getResource();
         String object = jedis.get(id);
+
         if (object == null) {
             jedis.close();
             throw new PlanNotFoundException("Plan is not present");
         } else {
 
+            JSONObject jsonObject = getJedisJSONObject(id);
+//            JSONObject object1 = new JSONObject(new JSONTokener(data));
+//            List<String>keys = new ArrayList<>(jsonObject.keySet());
+//            List<String> key_obj = new ArrayList<>(jsonObject.keySet());
+//
+//            for (int i =0; i<key_obj.size();i++){
+//                if(keys.contains(key_obj)){
+//                    jsonObject.put(key_obj.get(i),object1.get(key_obj.get(i)));
+//                }else {
+//                    System.out.println(key_obj.get(i));
+//                }
+//            }
+
+
+            //get the object from jedis, not the entire object
+//            JSONObject jsonObject = new JSONObject(new JSONTokener(object));
+
+            //get user object in JSONObject format
+            JSONObject userObject = new JSONObject(new JSONTokener(data));
+
+            //get the keys of userObject
+            List<String> keys = new ArrayList<>(userObject.keySet());
+
+            // iterate over the keys
+            for (int i = 0; i < keys.size(); i++) {
+
+                // check if value of property is JSONObject
+                if (jsonObject.get(keys.get(i)) instanceof JSONObject) {
+                    jsonObject = checkObject(jsonObject, userObject, keys.get(i));
+
+                } else if (jsonObject.get(keys.get(i)) instanceof JSONArray) { // check if object is a JSONArray
+
+                    JSONArray userArray = (JSONArray) userObject.get(keys.get(i));
+                    JSONArray jsonArray = (JSONArray) jsonObject.get(keys.get(i));
+                    // generate the key out of the userObject
+                    for (int k = 0; k < userArray.length(); k++) {
+
+                        JSONObject userObj = userArray.getJSONObject(k);
+                        JSONObject jsonObj = null;
+                        boolean isPresent = false;
+                        for (int j = 0; j < jsonArray.length(); j++) {
+                            if (userObj.get("objectId").equals(((JSONObject) jsonArray.get(j)).get("objectId"))) {
+                                jsonObj = (JSONObject) jsonArray.get(j);
+                                isPresent = true;
+                                break;
+                            }
+                        }
+                        if (isPresent) {
+
+                            List<String> obj_keys = new ArrayList<>(userObj.keySet());
+                            for(int j = 0; j < obj_keys.size(); j++) {
+
+                                if(userObj.get(obj_keys.get(j)) instanceof JSONObject) {
+                                    jsonObj = checkObject(jsonObj, userObj, obj_keys.get(j));
+                                } else {
+                                    jsonObj.put(obj_keys.get(j), userObj.get(obj_keys.get(j)));
+                                }
+                            }
+                        } else {
+                            jsonArray.put(jsonArray.length(), userObj);
+                        }
+                    }
+
+                } else {
+                    // if the key is just a property of the object
+                    jsonObject.put(keys.get(i), userObject.get(keys.get(i)));
+                    // update the object
+
+                }
+            }
+
+
+            //validateObject(jsonObject);
+            deleteJedisObject(id);
+            savePlan(jsonObject);
+            jedis.set(id, jsonObject.toString());
+            jedis.close();
+
+            etag = generateEtag(jsonObject);
+            map.put(id, etag);
+
+            Response exceptionResponse = new Response(HttpStatus.NO_CONTENT.toString(), "Plan with id " + id + " updated successfully!!");
+
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).eTag(etag).body(exceptionResponse);
+
         }
-        return null;
     }
 
     // to create a etag
-
     public String generateEtag(JSONObject object) {
 
         String key = String.valueOf(object.toString().hashCode());
@@ -188,6 +274,10 @@ public class PlanController {
         Jedis jedis = jedisPool.getResource();
 
         String object = jedis.get(id);
+
+        if(object == null) {
+            throw new InvalidInputException("Plan is not present");
+        }
 
         JSONObject jsonObject = new JSONObject(new JSONTokener(object));
         Set<String> keys = jedis.keys(id + "*");
@@ -262,7 +352,7 @@ public class PlanController {
                     jedis.set(str, String.valueOf(jsonObj));
                 }
                 jsonObject.put(key, list);
-                System.out.println(key + " json array");
+//                System.out.println(key + " json array");
             }
 
         }
@@ -337,12 +427,32 @@ public class PlanController {
         }
         String auth = authorization.split(" ")[1];
 
-        if(!AuthorizationController.authorize(auth)){
+        if (!AuthorizationController.authorize(auth)) {
             Response exceptionResponse = new Response(HttpStatus.UNAUTHORIZED.toString(), "Invalid or expired token!!!");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(exceptionResponse);
-
         }
         return null;
+    }
+
+    public JSONObject checkObject(JSONObject jsonObject, JSONObject userObject, String val) {
+
+        // get the object into a local JSONObject and generate the key for it
+        JSONObject obj = (JSONObject) userObject.get(val);
+
+        // check if the key matches the key of stored object in jedisObject
+        if (obj.get("objectId").equals(jsonObject.getJSONObject(val).get("objectId"))) {
+            JSONObject jObj = jsonObject.getJSONObject(val);
+            List<String> jObj_keys = new ArrayList<>(jObj.keySet());
+            for (int i = 0; i < jObj_keys.size(); i++) {
+                jObj.put(jObj_keys.get(i), obj.get(jObj_keys.get(i)));
+            }
+            // update the json object
+            jsonObject.put(val, jObj);
+        } else {
+            // replace the object in jedis and in the jedis object
+            jsonObject.put(val, userObject.get(val));
+        }
+        return jsonObject;
     }
 
 

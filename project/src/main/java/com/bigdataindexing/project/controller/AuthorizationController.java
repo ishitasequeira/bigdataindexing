@@ -1,7 +1,7 @@
 package com.bigdataindexing.project.controller;
 
-import com.bigdataindexing.project.exception.InvalidInputException;
 import com.bigdataindexing.project.exception.Response;
+import com.bigdataindexing.project.exception.UnauthorizedAccessException;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
@@ -31,6 +31,42 @@ public class AuthorizationController {
         }
     }
 
+  public static boolean authorize( String token){
+
+      // On the consumer side, parse the JWS and verify its RSA signature
+      SignedJWT signedJWT = null;
+      try {
+          signedJWT = SignedJWT.parse(token);
+      } catch (ParseException e) {
+          throw new UnauthorizedAccessException("Inavlid token");
+      }
+      RSAKey rsaPublicJWK = rsaJWK.toPublicJWK();
+
+      JWSVerifier verifier = null;
+      try {
+          verifier = new RSASSAVerifier(rsaPublicJWK);
+          if (signedJWT.verify(verifier)) {
+              try {
+                  if (new Date().after(signedJWT.getJWTClaimsSet().getExpirationTime())) {
+                      throw new UnauthorizedAccessException("Inavlid token");
+                  }
+              } catch (ParseException e) {
+                  throw new UnauthorizedAccessException("Inavlid token");
+              }
+          } else {
+              throw new UnauthorizedAccessException("Inavlid token");
+          }
+      } catch (JOSEException e) {
+          throw new UnauthorizedAccessException("Inavlid token");
+      }
+      try {
+          return signedJWT.verify(verifier);
+      } catch (JOSEException e) {
+          throw new UnauthorizedAccessException("Inavlid token");
+      }
+
+  }
+
   @PostMapping("/token")
   public ResponseEntity generateToken() {
     // Create RSA-signer with the private key
@@ -43,9 +79,9 @@ public class AuthorizationController {
 
     // Prepare JWT with claims set
     JWTClaimsSet claimsSet =
-        new JWTClaimsSet.Builder()
-            .subject("demo2")
-            .expirationTime(new Date(new Date().getTime() + 60 * 1000))
+            new JWTClaimsSet.Builder()
+                    .subject("demo2")
+                    .expirationTime(new Date(new Date().getTime() + 60 * 6000))
             .build();
 
     SignedJWT signedJWT =
@@ -68,30 +104,5 @@ public class AuthorizationController {
     Response exceptionResponse = new Response(HttpStatus.OK.toString(), s);
 
     return ResponseEntity.status(HttpStatus.OK).body(exceptionResponse);
-  }
-
-
-  public static boolean authorize( String token){
-
-      // On the consumer side, parse the JWS and verify its RSA signature
-      SignedJWT signedJWT = null;
-      try {
-          signedJWT = SignedJWT.parse(token);
-      } catch (ParseException e) {
-          throw new InvalidInputException("token not verified");
-      }
-      RSAKey rsaPublicJWK = rsaJWK.toPublicJWK();
-
-      JWSVerifier verifier = null;
-      try {
-          verifier = new RSASSAVerifier(rsaPublicJWK);
-      } catch (JOSEException e) {
-          throw new InvalidInputException("token not verified");
-      }
-      try {
-          return signedJWT.verify(verifier);
-      } catch (JOSEException e) {
-         throw new InvalidInputException("token not verified");
-      }
   }
 }

@@ -36,6 +36,13 @@ public class CustomizedResponseEntityExceptionHandler extends ResponseEntityExce
         return new ResponseEntity(exceptionResponse.toString(), HttpStatus.BAD_REQUEST);
     }
 
+    @ExceptionHandler(UnauthorizedAccessException.class)
+    @ResponseBody
+    public final ResponseEntity<Object> UnauthorizedAccessException(UnauthorizedAccessException ex, WebRequest request) {
+        Response exceptionResponse = new Response(HttpStatus.UNAUTHORIZED.toString(), ex.getMessage());
+        return new ResponseEntity(exceptionResponse.toString(), HttpStatus.UNAUTHORIZED);
+    }
+
     @ExceptionHandler(PlanCreated.class)
     @ResponseBody
     public final ResponseEntity<Object> PlanCreated(PlanCreated ex, WebRequest request) {
@@ -67,6 +74,14 @@ public class CustomizedResponseEntityExceptionHandler extends ResponseEntityExce
 
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(Exception ex, Object body, HttpHeaders headers, HttpStatus status, WebRequest request) {
+
+        System.out.println(headers);
+
+        if(headers.get("Authorization") == null) {
+            Response exceptionResponse = new Response(HttpStatus.PRECONDITION_FAILED.toString(), "Authorization Header is missing");
+            return new ResponseEntity(exceptionResponse.toString(), HttpStatus.PRECONDITION_FAILED);
+        }
+
         if(headers.get("If-Match") == null){
             if(headers.get("If-None-Match") == null){
                 Response exceptionResponse = new Response(HttpStatus.PRECONDITION_FAILED.toString(), "Etag headers missing");
