@@ -1,6 +1,8 @@
 package com.bigdataindexing.project.controller;
 
 import com.bigdataindexing.project.exception.*;
+import com.github.sonus21.rqueue.producer.RqueueMessageSender;
+import com.nimbusds.oauth2.sdk.http.HTTPRequest;
 import org.everit.json.schema.Schema;
 import org.everit.json.schema.ValidationException;
 import org.everit.json.schema.loader.SchemaLoader;
@@ -8,8 +10,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.*;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -18,8 +22,15 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.*;
 
+
+
 @RestController
 public class PlanController {
+
+    private @NonNull RqueueMessageSender rqueueMessageSender;
+
+    @Value("${elasticsearch.queue:elasticQueue}")
+    private String ELASTICQUEUE;
 
     Map<String, String> map = new HashMap<>();
 
@@ -47,10 +58,13 @@ public class PlanController {
         jedis.set(id, jsonObject.toString());
         jedis.close();
 
+
         String etag = generateEtag(jsonObject);
         map.put(id, etag);
 
+        enqueueES(id, jsonObject, "POST");
         Response exceptionResponse = new Response(HttpStatus.CREATED.toString(), "Plan created with id " + id);
+
 
         return ResponseEntity.created(new URI(jsonObject.get("objectId").toString())).eTag(etag).body(exceptionResponse);
     }
@@ -104,6 +118,7 @@ public class PlanController {
         }
 
         if(deleteJedisObject(id)) {
+            enqueueES(id, null, "DELETE");
             throw new SuccessResponse("The Plan has been deleted");
         } else {
             throw new InvalidInputException("Some error was encountered while deleting the plan");
@@ -147,6 +162,8 @@ public class PlanController {
         etag = generateEtag(jsonObject);
         map.put(id, etag);
 
+        enqueueES(id, jsonObject, "UPDATE");
+
         Response exceptionResponse = new Response(HttpStatus.NO_CONTENT.toString(), "Plan with id " + id + " updated successfully!!");
 
         return ResponseEntity.status(HttpStatus.NO_CONTENT).eTag(etag).body(exceptionResponse);
@@ -175,21 +192,6 @@ public class PlanController {
         } else {
 
             JSONObject jsonObject = getJedisJSONObject(id);
-//            JSONObject object1 = new JSONObject(new JSONTokener(data));
-//            List<String>keys = new ArrayList<>(jsonObject.keySet());
-//            List<String> key_obj = new ArrayList<>(jsonObject.keySet());
-//
-//            for (int i =0; i<key_obj.size();i++){
-//                if(keys.contains(key_obj)){
-//                    jsonObject.put(key_obj.get(i),object1.get(key_obj.get(i)));
-//                }else {
-//                    System.out.println(key_obj.get(i));
-//                }
-//            }
-
-
-            //get the object from jedis, not the entire object
-//            JSONObject jsonObject = new JSONObject(new JSONTokener(object));
 
             //get user object in JSONObject format
             JSONObject userObject = new JSONObject(new JSONTokener(data));
@@ -254,6 +256,8 @@ public class PlanController {
 
             etag = generateEtag(jsonObject);
             map.put(id, etag);
+
+            enqueueES(id, jsonObject, "UPDATE");
 
             Response exceptionResponse = new Response(HttpStatus.NO_CONTENT.toString(), "Plan with id " + id + " updated successfully!!");
 
@@ -397,29 +401,6 @@ public class PlanController {
         }
     }
 
-    public boolean putPlanHelper(JSONObject jsonObject, JSONObject jedisJsonObject){
-
-        List<String> keys = (List<String>) jsonObject.keySet();
-        for(int i =0 ; i<keys.size();i++){
-            if(jedisJsonObject.get(keys.get(i))!=null){
-                if(jsonObject.get(keys.get(i)) instanceof JSONArray){
-
-                }else  if(jsonObject.get(keys.get(i)) instanceof JSONArray){
-
-                }else {
-                    if(jsonObject.get(keys.get(i) ) != jedisJsonObject.get(keys.get(i))){
-                        jedisJsonObject.put(keys.get(i), jsonObject.get(keys.get(i)));
-                    }
-                }
-
-            }else {
-                throw new InvalidInputException("Invalid Input.");
-            }
-        }
-
-        return false;
-    }
-
     public ResponseEntity<Response> authorize(String authorization){
         if (authorization == null || authorization.isEmpty()){
             Response exceptionResponse = new Response(HttpStatus.UNAUTHORIZED.toString(), "Invalid or expired token!!!");
@@ -453,6 +434,17 @@ public class PlanController {
             jsonObject.put(val, userObject.get(val));
         }
         return jsonObject;
+    }
+
+    public void enqueueES(String key, JSONObject jsonObject, String type) {
+
+        JSONObject object = new JSONObject();
+        object.put("key", key);
+        object.put("data", jsonObject);
+        object.put("typeOfRequest", type);
+        Jedis jedis = jedisPool.getResource();
+        jedis.rpush(ELASTICQUEUE, object.toString());
+        jedis.close();
     }
 
 
